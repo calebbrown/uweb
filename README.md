@@ -10,5 +10,5 @@ A micro web framework for [go](http://golang.org).
 
 ## Documentation
 
-Simply run `godoc -http=":6060"`.
+Visit [http://godoc.org/github.com/calebbrown/uweb](http://godoc.org/github.com/calebbrown/uweb) or simply run `godoc -http=":6060"` after installation.
 

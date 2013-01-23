@@ -9,7 +9,7 @@ import (
     "io"
     "net/http/httptest"
     "net/http"
-    "uweb"
+    "github.com/calebbrown/uweb"
 )
 
 func simpleView1() string {

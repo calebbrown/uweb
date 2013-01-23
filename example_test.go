@@ -4,17 +4,17 @@
 
 package uweb_test
 
-import "uweb"
+import "github.com/calebbrown/uweb"
 
 // This example demonstrates a custom instance of App.
 func ExampleApp() {
     app := uweb.NewApp()
 
-    app.Get("^/hello/(.*)", func (name string) string {
+    app.Get("^hello/(.*)", func (name string) string {
         return "Hello, " + name
     })
 
-    app.Post("^/submit/$", func (ctx *uweb.Context) {
+    app.Post("^submit/$", func (ctx *uweb.Context) {
 
     })
 
@@ -24,11 +24,11 @@ func ExampleApp() {
 func ExampleMount() {
     app := uweb.NewApp()
 
-    app.Get("^/bar/(.*)", func (name string) string {
+    app.Get("^bar/(.*)", func (name string) string {
         return "Hello, " + name
     })
 
-    uweb.Mount("^/foo", app)
+    uweb.Mount("^foo/", app)
 
     uweb.Run("localhost:6060")
 }
