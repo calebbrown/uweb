@@ -5,7 +5,7 @@
 /*
 Package μweb is a micro web framework.
 
-It's purpose is to provide a simple set of tools for building web apps.
+It's purpose is to make building complex web apps simple.
 */
-
 package uweb
+
