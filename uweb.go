@@ -110,28 +110,14 @@ type ErrorResponse struct {
 	Message string
 }
 
-func NewError(code int) *ErrorResponse {
+func NewError(code int, message string) *ErrorResponse {
 	r := &ErrorResponse{
 		Response: *NewResponse(),
 	}
 	r.Response.Code = code
-	return r
-}
-
-func NewNotFound(message string) *ErrorResponse {
-	r := NewError(404)
-	r.Message = message
 	r.Content = []byte(message)
 	return r
 }
-
-func NewServerError(message string) *ErrorResponse {
-	r := NewError(503)
-	r.Message = message
-	r.Content = []byte(message)
-	return r
-}
-
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -165,6 +151,34 @@ func NewContext(r *http.Request) *Context {
 
 /*
 Target is a function that can process a request
+
+The simplest target takes no inputs and has no outputs:
+
+	func SimpleTarget() {
+		Abort(404, "Page Not Found")
+	}
+
+A more complex target might take the Context and arguments parsed from the
+url pattern and return a rendered string:
+
+	func MyTarget(ctx *uweb.Context, arg1, arg2 string) string {
+		ctx.Response.Header().Set("Content-Type", "text/plain")
+		return fmt.Sprintf("arg1: %s, arg2: %s", arg1, arg2)
+	}
+
+	uweb.Get("^([0-9]+)/([a-z-]+)/", MyTarget)
+
+Targets can also return any value that can be successfully converted into JSON
+using json.Marshal.
+
+	type MyStruct struct {
+		Name string
+	}
+
+	func JSONTarget() MyStruct {
+		return MyStruct{Name: "Joe Blogs"}
+	}
+
 */
 type Target interface {}
 
@@ -263,13 +277,11 @@ func (r *router) FindTarget(path, method string) (Target, []string) {
 		}
 	}
 	if args == nil {
-		NotFound("Not Found")
+		Abort(404, "Not Found")
 	}
 	target := route.TargetForMethod(method)
 	if target == nil {
-		error := NewError(405)
-		error.Message = "Method not allowed"
-		panic(error)
+		Abort(405, "Method not allowed")
 	}
 	return target, args
 }
@@ -471,7 +483,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp = a.Handle(ctx)
 	if resp == nil {
-		resp = NewNotFound("Page Not Found")
+		resp = NewError(404, "Page Not Found")
 	}
 	resp.WriteResponse(w)
 
@@ -569,29 +581,18 @@ func Redirect(url string) {
 	RedirectWithCode(url, 302)
 }
 
-// NotFound breaks out of the current view and returns a
-// not found (404) response
-//
-//    func MyView() {
-//        NotFound("Nothing to see here...")
-//    }
-func NotFound(message string) {
-	r := NewNotFound(message)
-	panic(r)
-}
-
-// Abort breaks out of the current view and returns a
-// server error (503) response
+// Abort breaks out of the current view and returns an
+// error response
 //
 //    func MyView() string {
 //        r, err := myFunc()
 //        if err != nil {
-//            Abort("Oh no, an error occured!")
+//            Abort(503, "Oh no, an error occured!")
 //        }
 //        return r
 //    }
-func Abort(message string) {
-	r := NewServerError(message)
+func Abort(code int, message string) {
+	r := NewError(code, message)
 	panic(r)
 }
 
@@ -610,4 +611,3 @@ func Abort(message string) {
 // BUG(calebbrown): add ability to merge two Apps together
 
 // BUG(calebbrown): add ability to merge responses together
-

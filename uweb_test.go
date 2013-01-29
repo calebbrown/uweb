@@ -38,7 +38,7 @@ func simpleView6(ctx *uweb.Context, args []string) string {
 
 
 func notFoundView() {
-    uweb.NotFound("Page Not Found")
+    uweb.Abort(404, "Page Not Found")
 }
 
 func redirectView() {
@@ -46,7 +46,7 @@ func redirectView() {
 }
 
 func abortView() {
-    uweb.Abort("the system is down")
+    uweb.Abort(503, "the system is down")
 }
 
 

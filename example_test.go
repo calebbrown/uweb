@@ -4,7 +4,9 @@
 
 package uweb_test
 
-import "github.com/calebbrown/uweb"
+import (
+    "github.com/calebbrown/uweb"
+)
 
 // This example demonstrates a custom instance of App.
 func ExampleApp() {
@@ -18,7 +20,7 @@ func ExampleApp() {
 
     })
 
-    uweb.RunApp("localhost:6060", app)
+    app.Run("localhost:6060")
 }
 
 func ExampleMount() {
@@ -32,3 +34,4 @@ func ExampleMount() {
 
     uweb.Run("localhost:6060")
 }
+
