@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"html"
+	"io"
+	"bytes"
 //	"runtime"
 
 	"fmt"
@@ -30,8 +32,6 @@ func argIsContext(argType reflect.Type) bool {
 }
 
 func argIsStringSlice(argType reflect.Type) bool {
-	fmt.Println(argType)
-	fmt.Println(argType.Kind())
 	return argType.Kind() == reflect.Slice &&
 		argType.Elem().Kind() == reflect.String
 }
@@ -150,15 +150,20 @@ func NewContext(r *http.Request) *Context {
 // Routing
 
 /*
-Target is a function that can process a request
+A Target is a function that can process a request. Targets are passed into the
+methods Route, Get, Head, Post, etc.
 
-The simplest target takes no inputs and has no outputs:
+	app.Get("^path/to/handle/", MyTarget)
+
+	Route("^blog/([0-9)+)/edit/$", BlogEdit)
+
+The simplest target has no inputs and no outputs:
 
 	func SimpleTarget() {
 		Abort(404, "Page Not Found")
 	}
 
-A more complex target might take the Context and arguments parsed from the
+A more complex target might take the Context and args parsed from the
 url pattern and return a rendered string:
 
 	func MyTarget(ctx *uweb.Context, arg1, arg2 string) string {
@@ -168,8 +173,19 @@ url pattern and return a rendered string:
 
 	uweb.Get("^([0-9]+)/([a-z-]+)/", MyTarget)
 
-Targets can also return any value that can be successfully converted into JSON
-using json.Marshal.
+
+Additionally a target can be a variadic function, which is useful if
+the target is called with an varing number of arguments:
+
+	func MyTarget(args ...string) {
+		...
+	}
+
+The return value can be of a variety of types: string, []byte, *Response, and
+io.Reader are all supported.
+
+Finally, a target can return a value of any type that can be successfully
+converted into JSON using json.Marshal.
 
 	type MyStruct struct {
 		Name string
@@ -393,7 +409,7 @@ func (a *App) call(ctx *Context, target Target, args []string) []reflect.Value {
 		if argIndex < argLength {
 			// Dump all the args as a []string if possible
 			argType = funcType.In(argIndex)
-			if argIsStringSlice(argType) {
+			if !funcType.IsVariadic() && argIsStringSlice(argType) {
 				callArgs = append(callArgs, reflect.ValueOf(args))
 			} else {
 				// Otherwise append them one by one
@@ -442,9 +458,8 @@ func (a *App) cast(response *Response, results []reflect.Value) *Response {
 	}
 	result := results[0].Interface()
 
+	// Try and convert simple known types
 	switch result.(type) {
-	case nil:
-		break;
 	case string:
 		s, _ := result.(string)
 		response.Content = []byte(s)
@@ -457,6 +472,11 @@ func (a *App) cast(response *Response, results []reflect.Value) *Response {
 	case *Response:
 		r, _ := result.(*Response)
 		return r
+	case io.Reader:
+		r, _ := result.(io.Reader)
+		var b bytes.Buffer
+		b.ReadFrom(r)
+		response.Content = b.Bytes()
 	default:
 		// attempt to return a JSON data response
 		json_content, err := json.Marshal(result)
@@ -466,6 +486,7 @@ func (a *App) cast(response *Response, results []reflect.Value) *Response {
 		response.Content = json_content
 		response.Header().Set("Content-Type", "application/json")
 	}
+
 	return response
 }
 
@@ -604,10 +625,15 @@ func Abort(code int, message string) {
 
 // BUG(calebbrown): support Fast-CGI
 
-// BUG(calebbrown): add more tests
+// BUG(calebbrown): add more tests - query and post data
 
 // BUG(calebbrown): add error handler support
 
 // BUG(calebbrown): add ability to merge two Apps together
 
 // BUG(calebbrown): add ability to merge responses together
+
+// BUG(calebbrown): verify a target and extract it's information when it's
+// added to the route
+
+// BUG(calebbrown): Form() and Query() methods in the context

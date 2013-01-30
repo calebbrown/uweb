@@ -36,6 +36,11 @@ func simpleView6(ctx *uweb.Context, args []string) string {
     return args[0] + " " + args[1]
 }
 
+func simpleView7(ctx *uweb.Context, args ...string) string {
+    return args[0] + " " + args[1]
+}
+
+
 
 func notFoundView() {
     uweb.Abort(404, "Page Not Found")
@@ -61,6 +66,7 @@ func init() {
     app.Route("^view4/(world)/$", simpleView4)
     app.Route("^view5/(world)/$", simpleView5)
     app.Route("^view6/(hello)/(world)/$", simpleView6)
+    app.Route("^view7/(hello)/(world)/$", simpleView7)
     app.Route("^notfound/$", notFoundView)
     app.Route("^redirect/$", redirectView)
     app.Route("^abort/$", abortView)
@@ -116,6 +122,11 @@ func TestSimpleViews(t *testing.T) {
 
     out6 := doSimpleRequest("GET", "/view6/hello/world/", nil)
     if out6.Body.String() != "hello world" {
+        t.Error("Unexpected body")
+    }
+
+    out7 := doSimpleRequest("GET", "/view7/hello/world/", nil)
+    if out7.Body.String() != "hello world" {
         t.Error("Unexpected body")
     }
 }
