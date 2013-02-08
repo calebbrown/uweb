@@ -32,11 +32,7 @@ func simpleView5(ctx *uweb.Context, test string) string {
 	return "hello " + test
 }
 
-func simpleView6(ctx *uweb.Context, args []string) string {
-	return args[0] + " " + args[1]
-}
-
-func simpleView7(ctx *uweb.Context, args ...string) string {
+func simpleView6(ctx *uweb.Context, args ...string) string {
 	return args[0] + " " + args[1]
 }
 
@@ -62,7 +58,6 @@ func init() {
 	app.Route("^view4/(world)/$", simpleView4)
 	app.Route("^view5/(world)/$", simpleView5)
 	app.Route("^view6/(hello)/(world)/$", simpleView6)
-	app.Route("^view7/(hello)/(world)/$", simpleView7)
 	app.Route("^notfound/$", notFoundView)
 	app.Route("^redirect/$", redirectView)
 	app.Route("^abort/$", abortView)
@@ -116,11 +111,6 @@ func TestSimpleViews(t *testing.T) {
 
 	out6 := doSimpleRequest("GET", "/view6/hello/world/", nil)
 	if out6.Body.String() != "hello world" {
-		t.Error("Unexpected body")
-	}
-
-	out7 := doSimpleRequest("GET", "/view7/hello/world/", nil)
-	if out7.Body.String() != "hello world" {
 		t.Error("Unexpected body")
 	}
 }
@@ -198,4 +188,16 @@ func TestMountedApp(t *testing.T) {
 	if out1.Body.String() != "hello world" {
 		t.Error("Unexpected body")
 	}
+}
+
+func TestInvalidInputs(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil {
+			t.Error("Expected a panic.")
+		}
+	}()
+	// this will fail with a panic. these functions are invalid
+	uweb.Route("^test_fail", func(foo int) int {
+		return foo + 1
+	})
 }

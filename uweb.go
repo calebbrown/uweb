@@ -192,9 +192,11 @@ converted into JSON using json.Marshal.
 */
 type Target interface{}
 
+type callableTarget func(ctx *Context, args ...string) []reflect.Value
+
 type route struct {
 	re      *regexp.Regexp
-	targets map[string]Target
+	targets map[string]callableTarget
 }
 
 func newRoute(pattern string) (*route, error) {
@@ -204,11 +206,11 @@ func newRoute(pattern string) (*route, error) {
 	}
 	return &route{
 		re:      re,
-		targets: make(map[string]Target),
+		targets: make(map[string]callableTarget),
 	}, nil
 }
 
-func (r *route) AddTarget(method string, target Target) {
+func (r *route) AddTarget(method string, target callableTarget) {
 	if method == "" {
 		method = "ANY"
 	}
@@ -223,7 +225,7 @@ func (r *route) Parse(path string) []string {
 	return values[1:]
 }
 
-func (r *route) TargetForMethod(method string) Target {
+func (r *route) TargetForMethod(method string) callableTarget {
 	method = strings.ToUpper(method)
 
 	// target for method exists explicitly
@@ -258,7 +260,7 @@ func newRouter() *router {
 	return &router{routes: make(map[string]route)}
 }
 
-func (r *router) AddRoute(pattern, method string, target Target) error {
+func (r *router) AddRoute(pattern, method string, target callableTarget) error {
 	route, ok := r.routes[pattern]
 	if !ok {
 		newRoute, err := newRoute(pattern)
@@ -277,7 +279,7 @@ func (r *router) GetRoute(pattern string) (route, bool) {
 	return rt, ok
 }
 
-func (r *router) FindTarget(path, method string) (Target, []string) {
+func (r *router) FindTarget(path, method string) (callableTarget, []string) {
 	var args []string
 	var route route
 	for _, route = range r.routes {
@@ -320,8 +322,60 @@ func NewApp() *App {
 	return a
 }
 
+func (a *App) makeTargetCallable(target Target) callableTarget {
+	function := reflect.ValueOf(target)
+	funcType := function.Type()
+	hasContext := false
+	hasArgs := false
+
+	if inNum := funcType.NumIn(); inNum > 0 {
+		firstArg := 0
+		if argIsContext(funcType.In(0)) {
+			hasContext = true
+			firstArg = 1
+		}
+		// TODO: test that the rest of the args are valid :)
+		hasArgs = inNum > firstArg
+		if hasArgs {
+			valid := true
+			for i := firstArg; i < inNum; i++ {
+				if funcType.In(i).Kind() != reflect.String {
+					valid = false
+					break
+				}
+			}
+
+			if !(valid || argIsStringSlice(funcType.In(firstArg))) {
+				panic(fmt.Sprintf("Invalid target function '%s'. Incorrect argument types.", function.String()))
+			}
+		}
+	}
+
+	var callable callableTarget = func(ctx *Context, args ...string) []reflect.Value {
+		var callArgs []reflect.Value
+
+		if hasContext {
+			callArgs = append(callArgs, reflect.ValueOf(ctx))
+		}
+
+		if hasArgs {
+			for _, arg := range args {
+				callArgs = append(callArgs, reflect.ValueOf(arg))
+			}
+		}
+
+		return function.Call(callArgs)
+	}
+
+	return callable
+}
+
+// addRoute takes a target and saves it in the router.
+//
+// It also wraps up the target in code that makes it easier to call
 func (a *App) addRoute(pattern, method string, target Target) error {
-	return a.router.AddRoute(pattern, method, target)
+	callable := a.makeTargetCallable(target)
+	return a.router.AddRoute(pattern, method, callable)
 }
 
 // Map a function to a url pattern for any request method
@@ -382,36 +436,6 @@ func (a *App) Reset() {
 	a.router = *newRouter()
 }
 
-func (a *App) call(ctx *Context, target Target, args []string) []reflect.Value {
-	var callArgs []reflect.Value
-	function := reflect.ValueOf(target)
-
-	funcType := function.Type()
-	if argLength := funcType.NumIn(); argLength > 0 {
-		argIndex := 0
-		// Add the context the list of arguments if needed
-		argType := funcType.In(argIndex)
-		if argIsContext(argType) {
-			callArgs = append(callArgs, reflect.ValueOf(ctx))
-			argIndex = 1
-		}
-		if argIndex < argLength {
-			// Dump all the args as a []string if possible
-			argType = funcType.In(argIndex)
-			if !funcType.IsVariadic() && argIsStringSlice(argType) {
-				callArgs = append(callArgs, reflect.ValueOf(args))
-			} else {
-				// Otherwise append them one by one
-				for _, arg := range args {
-					callArgs = append(callArgs, reflect.ValueOf(arg))
-				}
-			}
-		}
-	}
-
-	return function.Call(callArgs)
-}
-
 // find and call wraps up the process of path matching and calling the target
 // so that we can capture any error responses that are generated for processing
 //
@@ -433,7 +457,7 @@ func (a *App) findAndCall(ctx *Context) (results []reflect.Value) {
 
 	target, args := a.router.FindTarget(ctx.Path, ctx.Method)
 
-	return a.call(ctx, target, args)
+	return target(ctx, args...)
 }
 
 // cast takes a return value from a target and attempts to convert it
@@ -618,7 +642,6 @@ func Abort(code int, message string) {
 
 // BUG(calebbrown): add ability to merge responses together
 
-// BUG(calebbrown): verify a target and extract it's information when it's
-// added to the route
+// BUG(calebbrown): verify a target when it's added to the route
 
 // BUG(calebbrown): Form() and Query() methods in the context
