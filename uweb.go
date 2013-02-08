@@ -642,6 +642,4 @@ func Abort(code int, message string) {
 
 // BUG(calebbrown): add ability to merge responses together
 
-// BUG(calebbrown): verify a target when it's added to the route
-
 // BUG(calebbrown): Form() and Query() methods in the context
