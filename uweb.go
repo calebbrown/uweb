@@ -5,26 +5,23 @@
 package uweb
 
 import (
+	"bytes"
+	"encoding/json"
+	"html"
+	"io"
 	"net/http"
 	"net/url"
-	"encoding/json"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
-	"html"
-	"io"
-	"bytes"
-//	"runtime"
+	//	"runtime"
 
 	"fmt"
 )
 
-
-
 //////////////////////////////////////////////////////////////////////////////
 // Helpers
-
 
 func argIsContext(argType reflect.Type) bool {
 	return argType.Kind() == reflect.Ptr &&
@@ -35,7 +32,6 @@ func argIsStringSlice(argType reflect.Type) bool {
 	return argType.Kind() == reflect.Slice &&
 		argType.Elem().Kind() == reflect.String
 }
-
 
 //////////////////////////////////////////////////////////////////////////////
 // Response Handling
@@ -49,14 +45,14 @@ type responseWriter interface {
 
 // Response represents a http response to a received request
 type Response struct {
-	header http.Header
-	Code int
+	header  http.Header
+	Code    int
 	Content []byte
 }
 
 func NewResponse() *Response {
 	r := &Response{
-		Code: 200,
+		Code:   200,
 		header: make(http.Header),
 	}
 	return r
@@ -93,7 +89,7 @@ func (r *Response) WriteResponse(w http.ResponseWriter) {
 	// set the headers
 	for k, values := range r.header {
 		for _, v := range values {
-			w.Header().Add(k,v)
+			w.Header().Add(k, v)
 		}
 	}
 
@@ -106,7 +102,7 @@ func (r *Response) WriteResponse(w http.ResponseWriter) {
 
 type ErrorResponse struct {
 	Response
-	Stack []byte // TODO: populate the stacktrace
+	Stack   []byte // TODO: populate the stacktrace
 	Message string
 }
 
@@ -119,32 +115,30 @@ func NewError(code int, message string) *ErrorResponse {
 	return r
 }
 
-
 //////////////////////////////////////////////////////////////////////////////
 // Context
 
 // Context wraps up all the data related to the request and makes it easier to
 // access it.
 type Context struct {
-	Request *http.Request
+	Request  *http.Request
 	Response *Response
-	Get url.Values
-	Method string
-	Path string
+	Get      url.Values
+	Method   string
+	Path     string
 	//Args []string
 }
 
 // Create a new instance of Context
 func NewContext(r *http.Request) *Context {
 	return &Context{
-		Request: r,
+		Request:  r,
 		Response: NewResponse(),
-		Get: r.URL.Query(),
-		Path: r.URL.Path,
-		Method: r.Method,
+		Get:      r.URL.Query(),
+		Path:     r.URL.Path,
+		Method:   r.Method,
 	}
 }
-
 
 //////////////////////////////////////////////////////////////////////////////
 // Routing
@@ -196,11 +190,11 @@ converted into JSON using json.Marshal.
 	}
 
 */
-type Target interface {}
+type Target interface{}
 
 type route struct {
-    re *regexp.Regexp
-    targets map[string]Target
+	re      *regexp.Regexp
+	targets map[string]Target
 }
 
 func newRoute(pattern string) (*route, error) {
@@ -209,7 +203,7 @@ func newRoute(pattern string) (*route, error) {
 		return nil, err
 	}
 	return &route{
-		re: re,
+		re:      re,
 		targets: make(map[string]Target),
 	}, nil
 }
@@ -260,7 +254,7 @@ type router struct {
 	routes map[string]route
 }
 
-func newRouter() (*router) {
+func newRouter() *router {
 	return &router{routes: make(map[string]route)}
 }
 
@@ -307,11 +301,8 @@ func (r *route) StripPattern(path string) string {
 	return path[l[1]:]
 }
 
-
-
 //////////////////////////////////////////////////////////////////////////////
 // App
-
 
 type Handler interface {
 	Handle(ctx *Context) *Response
@@ -319,7 +310,7 @@ type Handler interface {
 
 // An App is used to encapsulate a group of related routes.
 type App struct {
-     router router
+	router router
 }
 
 // Creates a new empty App
@@ -384,14 +375,12 @@ func (a *App) Mount(pattern string, handler Handler) error {
 	return a.addRoute(pattern, "ANY", wrapper)
 }
 
-
 // Resets the App back to it's initial state.
 //
 // This method will clear all the routes, mounts, error handlers, etc.
 func (a *App) Reset() {
 	a.router = *newRouter()
 }
-
 
 func (a *App) call(ctx *Context, target Target, args []string) []reflect.Value {
 	var callArgs []reflect.Value
@@ -516,7 +505,6 @@ func (a *App) Run(host string) {
 	http.ListenAndServe(host, a)
 }
 
-
 // Default instance of App
 var DefaultApp *App
 
@@ -561,7 +549,6 @@ func Mount(pattern string, handler Handler) error {
 func Run(host string) {
 	DefaultApp.Run(host)
 }
-
 
 // Debug is used to toggle debugging mode.
 //
@@ -616,8 +603,6 @@ func Abort(code int, message string) {
 	r := NewError(code, message)
 	panic(r)
 }
-
-
 
 // BUG(calebbrown): improve configurability
 
