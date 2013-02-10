@@ -334,7 +334,6 @@ func (a *App) makeTargetCallable(target Target) callableTarget {
 			hasContext = true
 			firstArg = 1
 		}
-		// TODO: test that the rest of the args are valid :)
 		hasArgs = inNum > firstArg
 		if hasArgs {
 			valid := true
@@ -532,7 +531,9 @@ func (a *App) Run(host string) {
 // Default instance of App
 var DefaultApp *App
 
-var debugMode bool
+var Config struct {
+	Debug bool
+}
 
 func Route(pattern string, target Target) {
 	DefaultApp.Route(pattern, target)
@@ -579,18 +580,18 @@ func Run(host string) {
 // In debugging mode information is logged to the console and errors aren't
 // captured
 func Debug(d bool) {
-	debugMode = d
+	Config.Debug = d
 }
 
 func log(message string) {
-	if debugMode {
+	if Config.Debug {
 		fmt.Printf("[muweb] %s\n", message)
 	}
 }
 
 func init() {
 	DefaultApp = NewApp()
-	debugMode = false
+	Config.Debug = false
 }
 
 // RedirectWithCode behaves like Redirect, but allows a custom HTTP

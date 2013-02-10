@@ -96,6 +96,7 @@ func save(ctx *uweb.Context) {
 }
 
 func main() {
+	uweb.Debug(true)
 	uweb.Get("^$", index)
 	uweb.Post("^save/$", save)
 	uweb.Run("localhost:6062")
