@@ -13,9 +13,9 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
-	//	"runtime"
 
 	"fmt"
 )
@@ -55,6 +55,7 @@ func NewResponse() *Response {
 		Code:   200,
 		header: make(http.Header),
 	}
+	r.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return r
 }
 
@@ -100,19 +101,44 @@ func (r *Response) WriteResponse(w http.ResponseWriter) {
 	w.Write(r.Content)
 }
 
+func (r *Response) Merge(resp *Response) {
+	r.Code = resp.Code
+	// TODO: Headers
+}
+
 type ErrorResponse struct {
 	Response
-	Stack   []byte // TODO: populate the stacktrace
+	Stack   string
 	Message string
 }
 
 func NewError(code int, message string) *ErrorResponse {
 	r := &ErrorResponse{
 		Response: *NewResponse(),
+		Message:  message,
 	}
 	r.Response.Code = code
 	r.Content = []byte(message)
 	return r
+}
+
+func (e *ErrorResponse) SetStack(clean bool) {
+	s := string(debug.Stack())
+
+	// Strip the first 6 lines of the stack
+	// This is a bit of a hack to clean up the stack trace.
+	// Removes call to SetStack(), call to recover code, call in runtime
+	if clean {
+		for i := 0; i < 6; i++ {
+			nlIndex := strings.IndexRune(s, '\n')
+			if nlIndex < 0 {
+				break
+			}
+			s = s[nlIndex+1:]
+		}
+	}
+
+	e.Stack = s
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -141,7 +167,7 @@ func NewContext(r *http.Request) *Context {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Routing
+// Callables: Targets and ErrorHandlers
 
 /*
 A Target is a function that can process a request. Targets are passed into the
@@ -192,11 +218,122 @@ converted into JSON using json.Marshal.
 */
 type Target interface{}
 
-type callableTarget func(ctx *Context, args ...string) []reflect.Value
+type ErrorHandler interface{}
+
+type wrappedTarget func(ctx *Context, args ...string) []reflect.Value
+type wrappedErrorHandler func(ctx *Context, e *ErrorResponse) []reflect.Value
+
+func wrapTarget(target Target) wrappedTarget {
+	function := reflect.ValueOf(target)
+	funcType := function.Type()
+	hasContext := false
+	hasArgs := false
+
+	if inNum := funcType.NumIn(); inNum > 0 {
+		firstArg := 0
+		if argIsContext(funcType.In(0)) {
+			hasContext = true
+			firstArg = 1
+		}
+		hasArgs = inNum > firstArg
+		if hasArgs {
+			valid := true
+			for i := firstArg; i < inNum; i++ {
+				if funcType.In(i).Kind() != reflect.String {
+					valid = false
+					break
+				}
+			}
+
+			if !(valid || argIsStringSlice(funcType.In(firstArg))) {
+				panic(fmt.Sprintf("Invalid target function '%s'. Incorrect argument types.", function.String()))
+			}
+		}
+	}
+
+	var wrapped wrappedTarget = func(ctx *Context, args ...string) []reflect.Value {
+		var callArgs []reflect.Value
+
+		if hasContext {
+			callArgs = append(callArgs, reflect.ValueOf(ctx))
+		}
+
+		if hasArgs {
+			for _, arg := range args {
+				callArgs = append(callArgs, reflect.ValueOf(arg))
+			}
+		}
+
+		return function.Call(callArgs)
+	}
+
+	return wrapped
+}
+
+func wrapErrorHandler(handler ErrorHandler) wrappedErrorHandler {
+	function := reflect.ValueOf(handler)
+	funcType := function.Type()
+	hasContext := false
+	hasResponse := false
+
+	if inNum := funcType.NumIn(); inNum > 0 {
+		in := 0
+		if argIsContext(funcType.In(0)) {
+			hasContext = true
+			in = 1
+		}
+		hasResponse = inNum > in
+		if hasResponse {
+			inR := funcType.In(in)
+			if !(inR.Kind() == reflect.Ptr &&
+				inR.Elem() == reflect.TypeOf(ErrorResponse{})) {
+				panic(fmt.Sprintf("Invalid error handler '%s'. Incorrect input types.", function.String()))
+			}
+		}
+	}
+
+	var wrapped wrappedErrorHandler = func(ctx *Context, e *ErrorResponse) []reflect.Value {
+		var callArgs []reflect.Value
+
+		if hasContext {
+			callArgs = append(callArgs, reflect.ValueOf(ctx))
+		}
+
+		if hasResponse {
+			callArgs = append(callArgs, reflect.ValueOf(e))
+		}
+
+		return function.Call(callArgs)
+	}
+
+	return wrapped
+}
+
+func defaultErrorHandler(ctx *Context, e *ErrorResponse) []reflect.Value {
+	s := `<!DOCTYPE>
+<html>
+	<head>
+		<title>Error: %d</title>
+	</head>
+	<body>
+		<h1>%d %s</h1>
+		%s
+	</body>
+</html>`
+	detail := ""
+	if Config.Debug && e.Stack != "" {
+		detail = fmt.Sprintf("<div>%s</div><pre>%s</pre>", e.Message, e.Stack)
+	}
+	res := fmt.Sprintf(s, e.StatusCode(), e.StatusCode(), string(e.Content), detail)
+	return []reflect.Value{reflect.ValueOf(res)}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Routing
 
 type route struct {
 	re      *regexp.Regexp
-	targets map[string]callableTarget
+	targets map[string]wrappedTarget
 }
 
 func newRoute(pattern string) (*route, error) {
@@ -206,11 +343,11 @@ func newRoute(pattern string) (*route, error) {
 	}
 	return &route{
 		re:      re,
-		targets: make(map[string]callableTarget),
+		targets: make(map[string]wrappedTarget),
 	}, nil
 }
 
-func (r *route) AddTarget(method string, target callableTarget) {
+func (r *route) AddTarget(method string, target wrappedTarget) {
 	if method == "" {
 		method = "ANY"
 	}
@@ -225,7 +362,7 @@ func (r *route) Parse(path string) []string {
 	return values[1:]
 }
 
-func (r *route) TargetForMethod(method string) callableTarget {
+func (r *route) TargetForMethod(method string) wrappedTarget {
 	method = strings.ToUpper(method)
 
 	// target for method exists explicitly
@@ -260,7 +397,7 @@ func newRouter() *router {
 	return &router{routes: make(map[string]route)}
 }
 
-func (r *router) AddRoute(pattern, method string, target callableTarget) error {
+func (r *router) AddRoute(pattern, method string, target wrappedTarget) error {
 	route, ok := r.routes[pattern]
 	if !ok {
 		newRoute, err := newRoute(pattern)
@@ -279,7 +416,7 @@ func (r *router) GetRoute(pattern string) (route, bool) {
 	return rt, ok
 }
 
-func (r *router) FindTarget(path, method string) (callableTarget, []string) {
+func (r *router) FindTarget(path, method string) (wrappedTarget, []string) {
 	var args []string
 	var route route
 	for _, route = range r.routes {
@@ -312,68 +449,22 @@ type Handler interface {
 
 // An App is used to encapsulate a group of related routes.
 type App struct {
-	router router
+	router        router
+	errorHandlers map[int]wrappedErrorHandler
 }
 
 // Creates a new empty App
 func NewApp() *App {
-	a := &App{}
+	a := &App{errorHandlers: make(map[int]wrappedErrorHandler)}
 	a.Reset()
 	return a
-}
-
-func (a *App) makeTargetCallable(target Target) callableTarget {
-	function := reflect.ValueOf(target)
-	funcType := function.Type()
-	hasContext := false
-	hasArgs := false
-
-	if inNum := funcType.NumIn(); inNum > 0 {
-		firstArg := 0
-		if argIsContext(funcType.In(0)) {
-			hasContext = true
-			firstArg = 1
-		}
-		hasArgs = inNum > firstArg
-		if hasArgs {
-			valid := true
-			for i := firstArg; i < inNum; i++ {
-				if funcType.In(i).Kind() != reflect.String {
-					valid = false
-					break
-				}
-			}
-
-			if !(valid || argIsStringSlice(funcType.In(firstArg))) {
-				panic(fmt.Sprintf("Invalid target function '%s'. Incorrect argument types.", function.String()))
-			}
-		}
-	}
-
-	var callable callableTarget = func(ctx *Context, args ...string) []reflect.Value {
-		var callArgs []reflect.Value
-
-		if hasContext {
-			callArgs = append(callArgs, reflect.ValueOf(ctx))
-		}
-
-		if hasArgs {
-			for _, arg := range args {
-				callArgs = append(callArgs, reflect.ValueOf(arg))
-			}
-		}
-
-		return function.Call(callArgs)
-	}
-
-	return callable
 }
 
 // addRoute takes a target and saves it in the router.
 //
 // It also wraps up the target in code that makes it easier to call
 func (a *App) addRoute(pattern, method string, target Target) error {
-	callable := a.makeTargetCallable(target)
+	callable := wrapTarget(target)
 	return a.router.AddRoute(pattern, method, callable)
 }
 
@@ -428,6 +519,11 @@ func (a *App) Mount(pattern string, handler Handler) error {
 	return a.addRoute(pattern, "ANY", wrapper)
 }
 
+// Register a handler to be called when an ErrorResponse is returned
+func (a *App) Error(code int, handler ErrorHandler) {
+	a.errorHandlers[code] = wrapErrorHandler(handler)
+}
+
 // Resets the App back to it's initial state.
 //
 // This method will clear all the routes, mounts, error handlers, etc.
@@ -449,7 +545,10 @@ func (a *App) findAndCall(ctx *Context) (results []reflect.Value) {
 			} else if response, ok := err.(*ErrorResponse); ok {
 				results[0] = reflect.ValueOf(response)
 			} else {
-				panic(err)
+				response := NewError(500, fmt.Sprint(err))
+				response.Content = []byte("Internal Server Error")
+				response.SetStack(true)
+				results[0] = reflect.ValueOf(response)
 			}
 		}
 	}()
@@ -459,11 +558,11 @@ func (a *App) findAndCall(ctx *Context) (results []reflect.Value) {
 	return target(ctx, args...)
 }
 
-// cast takes a return value from a target and attempts to convert it
-// into something that can be used as a response.
-func (a *App) cast(response *Response, results []reflect.Value) *Response {
+// cast takes a return value from a target or error handler and attempts to
+// convert it into something that can be used as a response.
+func (a *App) cast(ctx *Context, results []reflect.Value) *Response {
 	if len(results) == 0 {
-		return response
+		return ctx.Response
 	}
 	if len(results) > 1 {
 		panic("Too many values returned from target")
@@ -474,13 +573,17 @@ func (a *App) cast(response *Response, results []reflect.Value) *Response {
 	switch result.(type) {
 	case string:
 		s, _ := result.(string)
-		response.Content = []byte(s)
+		ctx.Response.Content = []byte(s)
 	case []byte:
 		bs, _ := result.([]byte)
-		response.Content = bs
+		ctx.Response.Content = bs
 	case *ErrorResponse:
 		r, _ := result.(*ErrorResponse)
-		return &r.Response
+		ctx.Response.Merge(&r.Response)
+		if handler, ok := a.errorHandlers[r.Code]; ok {
+			return a.cast(ctx, handler(ctx, r))
+		}
+		return a.cast(ctx, defaultErrorHandler(ctx, r))
 	case *Response:
 		r, _ := result.(*Response)
 		return r
@@ -488,23 +591,23 @@ func (a *App) cast(response *Response, results []reflect.Value) *Response {
 		r, _ := result.(io.Reader)
 		var b bytes.Buffer
 		b.ReadFrom(r)
-		response.Content = b.Bytes()
+		ctx.Response.Content = b.Bytes()
 	default:
 		// attempt to return a JSON data response
 		json_content, err := json.Marshal(result)
 		if err != nil {
 			panic("Unknown response type returned from view function")
 		}
-		response.Content = json_content
-		response.Header().Set("Content-Type", "application/json")
+		ctx.Response.Content = json_content
+		ctx.Response.Header().Set("Content-Type", "application/json")
 	}
 
-	return response
+	return ctx.Response
 }
 
 func (a *App) Handle(ctx *Context) *Response {
 	results := a.findAndCall(ctx)
-	resp := a.cast(ctx.Response, results)
+	resp := a.cast(ctx, results)
 	return resp
 }
 
@@ -569,6 +672,10 @@ func Options(pattern string, target Target) {
 
 func Mount(pattern string, handler Handler) error {
 	return DefaultApp.Mount(pattern, handler)
+}
+
+func Error(code int, handler ErrorHandler) {
+	DefaultApp.Error(code, handler)
 }
 
 func Run(host string) {
@@ -636,8 +743,6 @@ func Abort(code int, message string) {
 // BUG(calebbrown): support Fast-CGI
 
 // BUG(calebbrown): add more tests - query and post data
-
-// BUG(calebbrown): add error handler support
 
 // BUG(calebbrown): add ability to merge two Apps together
 

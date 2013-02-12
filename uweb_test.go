@@ -48,6 +48,17 @@ func abortView() {
 	uweb.Abort(503, "the system is down")
 }
 
+func noAuthView() {
+	uweb.Abort(401, "never seen")
+}
+
+func error401(r *uweb.ErrorResponse) *uweb.Response {
+	new_r := uweb.NewResponse()
+	new_r.Code = 999
+	new_r.Content = []byte("not authed")
+	return new_r
+}
+
 var app *uweb.App
 
 func init() {
@@ -61,6 +72,7 @@ func init() {
 	app.Route("^notfound/$", notFoundView)
 	app.Route("^redirect/$", redirectView)
 	app.Route("^abort/$", abortView)
+	app.Route("^noauth/$", noAuthView)
 
 	app.Get("^method/$", func() string { return "get" })
 	app.Head("^method/$", func() string { return "head" })
@@ -69,6 +81,8 @@ func init() {
 	app.Patch("^method/$", func() string { return "patch" })
 	app.Delete("^method/$", func() string { return "delete" })
 	app.Get("^method/get-only/$", func() string { return "get" })
+
+	app.Error(401, error401)
 
 	subApp := uweb.NewApp()
 	app.Mount("^sub/", subApp)
@@ -133,6 +147,16 @@ func TestAbortView(t *testing.T) {
 	out := doSimpleRequest("GET", "/abort/", nil)
 	if out.Code != 503 {
 		t.Errorf("Status code %d != 503", out.Code)
+	}
+}
+
+func TestErrorHandlerView(t *testing.T) {
+	out := doSimpleRequest("GET", "/noauth/", nil)
+	if out.Code != 999 {
+		t.Errorf("Status code %d != 999", out.Code)
+	}
+	if out.Body.String() != "not authed" {
+		t.Error("Response content unexpected")
 	}
 }
 
