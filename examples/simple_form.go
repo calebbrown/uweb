@@ -96,8 +96,10 @@ func save(ctx *uweb.Context) {
 }
 
 func main() {
-	uweb.Debug(true)
+	uweb.Config.Debug = true
 	uweb.Get("^$", index)
 	uweb.Post("^save/$", save)
-	uweb.Run("localhost:6062")
+	if err := uweb.Run("localhost:6062"); err != nil {
+		panic(err)
+	}
 }

@@ -626,16 +626,18 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log(fmt.Sprintf("%s %s [%d]", r.Method, r.RequestURI, resp.StatusCode()))
 }
 
-func (a *App) Run(host string) {
+func (a *App) Run(host string) error {
+	doAutoReload()
 	log("Listening on " + host)
-	http.ListenAndServe(host, a)
+	return http.ListenAndServe(host, a)
 }
 
 // Default instance of App
 var DefaultApp *App
 
 var Config struct {
-	Debug bool
+	Debug      bool
+	AutoReload bool
 }
 
 func Route(pattern string, target Target) {
@@ -678,16 +680,8 @@ func Error(code int, handler ErrorHandler) {
 	DefaultApp.Error(code, handler)
 }
 
-func Run(host string) {
-	DefaultApp.Run(host)
-}
-
-// Debug is used to toggle debugging mode.
-//
-// In debugging mode information is logged to the console and errors aren't
-// captured
-func Debug(d bool) {
-	Config.Debug = d
+func Run(host string) error {
+	return DefaultApp.Run(host)
 }
 
 func log(message string) {
@@ -696,9 +690,16 @@ func log(message string) {
 	}
 }
 
+func doAutoReload() {
+	if Config.Debug && Config.AutoReload {
+		AutoReloader()
+	}
+}
+
 func init() {
 	DefaultApp = NewApp()
 	Config.Debug = false
+	Config.AutoReload = false
 }
 
 // RedirectWithCode behaves like Redirect, but allows a custom HTTP
