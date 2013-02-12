@@ -635,6 +635,13 @@ func (a *App) Run(host string) error {
 // Default instance of App
 var DefaultApp *App
 
+// Configuration for µweb
+//
+// When Debug is set to true messages will be logged to stdout.
+//
+// When AutoReload is set to true, and Debug is set to true a call to Run()
+// will wrap the execution up so that when a change is detected on a dependency
+// it will restart the execution of the web application.
 var Config struct {
 	Debug      bool
 	AutoReload bool
