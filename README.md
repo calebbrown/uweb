@@ -2,6 +2,7 @@
 
 A micro web framework for [Go](http://golang.org).
 
+[![Build Status](https://travis-ci.org/calebbrown/uweb.png?branch=master)](https://travis-ci.org/calebbrown/uweb)
 
 ## Overview
 
