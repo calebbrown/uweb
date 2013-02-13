@@ -175,7 +175,7 @@ methods Route, Get, Head, Post, etc.
 
 	app.Get("^path/to/handle/", MyTarget)
 
-	Route("^blog/([0-9)+)/edit/$", BlogEdit)
+	uweb.Route("^blog/([0-9)+)/edit/$", BlogEdit)
 
 The simplest target has no inputs and no outputs:
 
@@ -201,8 +201,8 @@ the target is called with an varing number of arguments:
 		...
 	}
 
-The return value can be of a variety of types: string, []byte, *Response, and
-io.Reader are all supported.
+The return value can be one of a variety of types: string, []byte, *Response,
+and io.Reader are all supported.
 
 Finally, a target can return a value of any type that can be successfully
 converted into JSON using json.Marshal.
@@ -218,6 +218,30 @@ converted into JSON using json.Marshal.
 */
 type Target interface{}
 
+/*
+An ErrorHandler is a function that allows you to customize what happens when
+errors occur.
+
+Error handler's are associated with errors using the Error function.
+
+	uweb.Error(404, NotFoundHandler)
+
+	uweb.Error(500, SiteErrorHandler)
+
+Error handlers can optionally accept a Context or the originating ErrorResponse
+
+	func NotFoundHandler(ctx *uweb.Context) string { ... }
+
+	func SiteErrorHandler(e *ErrorResponse) string { ... }
+
+	func MyErrorHandler(ctx *uweb.Context, e *ErrorResponse) *Response { ... }
+
+Like Targets the return value for error handlers can be one of a variety of
+types: string, []byte, *Response, and io.Reader are all supported.
+
+Finally, error handlers can return a value of any type that can be successfully
+converted into JSON using json.Marhsal.
+*/
 type ErrorHandler interface{}
 
 type wrappedTarget func(ctx *Context, args ...string) []reflect.Value
