@@ -75,12 +75,14 @@ func init() {
 	app.Route("^noauth/$", noAuthView)
 
 	app.Get("^method/$", func() string { return "get" })
-	app.Head("^method/$", func() string { return "head" })
 	app.Post("^method/$", func() string { return "post" })
 	app.Put("^method/$", func() string { return "put" })
 	app.Patch("^method/$", func() string { return "patch" })
 	app.Delete("^method/$", func() string { return "delete" })
 	app.Get("^method/get-only/$", func() string { return "get" })
+
+	app.Head("^head1/$", func() string { return "test head" })
+	app.Get("^head2/$", func() string { return "test get" })
 
 	app.Error(401, error401)
 
@@ -173,7 +175,6 @@ func TestRedirectView(t *testing.T) {
 func TestMethodTypes(t *testing.T) {
 	methods := []string{
 		"get",
-		"head",
 		"post",
 		"put",
 		"patch",
@@ -184,6 +185,22 @@ func TestMethodTypes(t *testing.T) {
 		content := out.Body.String()
 		if content != method {
 			t.Errorf("Method %s handled by view %s", method, content)
+		}
+	}
+}
+
+func TestHeadResponses(t *testing.T) {
+	urls := []string{
+		"/head1/",
+		"/head2/",
+	}
+	for _, url := range urls {
+		out := doSimpleRequest("head", url, nil)
+		if len(out.Body.String()) != 0 {
+			t.Error("HEAD request returned a Body")
+		}
+		if out.Header().Get("content-length") == "0" {
+			t.Error("HEAD returned empty content-length.")
 		}
 	}
 }

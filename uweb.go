@@ -45,15 +45,17 @@ type responseWriter interface {
 
 // Response represents a http response to a received request
 type Response struct {
-	header  http.Header
-	Code    int
-	Content []byte
+	header       http.Header
+	Code         int
+	Content      []byte
+	WriteContent bool
 }
 
 func NewResponse() *Response {
 	r := &Response{
-		Code:   200,
-		header: make(http.Header),
+		Code:         200,
+		header:       make(http.Header),
+		WriteContent: true,
 	}
 	r.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return r
@@ -85,7 +87,10 @@ func (r *Response) StatusCode() int {
 }
 
 func (r *Response) WriteResponse(w http.ResponseWriter) {
-	r.Header().Set("Content-Length", strconv.Itoa(len(r.Content)))
+	// Only set the content length if it hasn't already been set
+	if r.Header().Get("Content-Length") == "" {
+		r.Header().Set("Content-Length", strconv.Itoa(len(r.Content)))
+	}
 
 	// set the headers
 	for k, values := range r.header {
@@ -98,7 +103,9 @@ func (r *Response) WriteResponse(w http.ResponseWriter) {
 	w.WriteHeader(r.Code)
 
 	// write the content
-	w.Write(r.Content)
+	if r.WriteContent {
+		w.Write(r.Content)
+	}
 }
 
 func (r *Response) Merge(resp *Response) {
@@ -632,6 +639,8 @@ func (a *App) cast(ctx *Context, results []reflect.Value) *Response {
 func (a *App) Handle(ctx *Context) *Response {
 	results := a.findAndCall(ctx)
 	resp := a.cast(ctx, results)
+	// Flag the content to only be written if the request isn't "HEAD"
+	resp.WriteContent = strings.ToUpper(ctx.Method) != "HEAD"
 	return resp
 }
 
