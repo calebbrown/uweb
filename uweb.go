@@ -539,6 +539,8 @@ func (a *App) Options(pattern string, target Target) error {
 	return a.addRoute(pattern, "OPTIONS", target)
 }
 
+// Mount an application (uweb.App or anything that implements
+// the Handler interface) at a specific url pattern
 func (a *App) Mount(pattern string, handler Handler) error {
 
 	wrapper := func(ctx *Context) *Response {
