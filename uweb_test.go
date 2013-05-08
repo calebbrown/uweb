@@ -52,6 +52,14 @@ func abortView() {
 	uweb.Abort(503, "the system is down")
 }
 
+func cookieView(ctx *uweb.Context) string {
+	cookie, err := ctx.GetCookie("test-cookie")
+	if err == nil {
+		return cookie
+	}
+	return "empty"
+}
+
 var app *uweb.App
 
 func init() {
@@ -66,6 +74,7 @@ func init() {
 	app.Route("^notfound/$", notFoundView)
 	app.Route("^redirect/$", redirectView)
 	app.Route("^abort/$", abortView)
+	app.Route("^cookie/$", cookieView)
 
 	app.Get("^method/$", func() string { return "get" })
 	app.Head("^method/$", func() string { return "head" })
@@ -81,11 +90,15 @@ func init() {
 	subApp.Get("^view/$", simpleView1)
 }
 
-func doSimpleRequest(method, url string, body io.Reader) *httptest.ResponseRecorder {
-	req, _ := http.NewRequest(method, url, body)
+func doRequest(req *http.Request) *httptest.ResponseRecorder {
 	out := httptest.NewRecorder()
 	app.ServeHTTP(out, req)
 	return out
+}
+
+func doSimpleRequest(method, url string, body io.Reader) *httptest.ResponseRecorder {
+	req, _ := http.NewRequest(method, url, body)
+	return doRequest(req)
 }
 
 func TestSimpleViews(t *testing.T) {
@@ -196,6 +209,24 @@ func TestSingleMethod(t *testing.T) {
 func TestMountedApp(t *testing.T) {
 	out1 := doSimpleRequest("GET", "/sub/view/", nil)
 	if out1.Body.String() != "hello world" {
+		t.Error("Unexpected body")
+	}
+}
+
+func TestEmptyCookieView(t *testing.T) {
+	out1 := doSimpleRequest("GET", "/cookie/", nil)
+	if out1.Body.String() != "empty" {
+		t.Error("Unexpected body")
+	}
+}
+
+func TestCookieView(t *testing.T) {
+	req, _ := http.NewRequest("GET", "/cookie/", nil)
+	req.AddCookie(&http.Cookie{Name: "test-cookie1", Value: "test-cookie-value1"})
+	req.AddCookie(&http.Cookie{Name: "test-cookie", Value: "test-cookie-value"})
+	req.AddCookie(&http.Cookie{Name: "test-cookie2", Value: "test-cookie-value2"})
+	out := doRequest(req)
+	if out.Body.String() != "test-cookie-value" {
 		t.Error("Unexpected body")
 	}
 }

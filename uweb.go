@@ -7,6 +7,7 @@ package uweb
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 	"strings"
 	//	"runtime"
 
-	"fmt"
 )
 
 //////////////////////////////////////////////////////////////////////////////
@@ -126,6 +126,7 @@ type Context struct {
 	Get      url.Values
 	Method   string
 	Path     string
+	Cookies  []*http.Cookie
 	//Args []string
 }
 
@@ -137,7 +138,18 @@ func NewContext(r *http.Request) *Context {
 		Get:      r.URL.Query(),
 		Path:     r.URL.Path,
 		Method:   r.Method,
+		Cookies:  r.Cookies(),
 	}
+}
+
+// Return a cookie's value based on it's name
+func (c *Context) GetCookie(name string) (string, error) {
+	for _, cookie := range c.Cookies {
+		if cookie.Name == name {
+			return cookie.Value, nil
+		}
+	}
+	return "", fmt.Errorf("cookie key '%s' not found", name)
 }
 
 //////////////////////////////////////////////////////////////////////////////
