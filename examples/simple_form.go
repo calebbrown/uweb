@@ -66,10 +66,6 @@ func saveMessage(message string) {
 	enc.Encode(messages)
 }
 
-type IndexData struct {
-	Messages []string
-}
-
 func index() *bytes.Buffer {
 	t, err := template.New("index").Parse(IndexTemplate)
 	if err != nil {
@@ -85,7 +81,7 @@ func index() *bytes.Buffer {
 
 	// render the template
 	var b bytes.Buffer
-	err = t.Execute(&b, IndexData{Messages: messages})
+	err = t.Execute(&b, struct{ Messages []string }{Messages: messages})
 	if err != nil {
 		panic(err)
 	}
@@ -100,7 +96,10 @@ func save(ctx *uweb.Context) {
 }
 
 func main() {
+	uweb.Config.Debug = true
 	uweb.Get("^$", index)
 	uweb.Post("^save/$", save)
-	uweb.Run("localhost:6062")
+	if err := uweb.Run("localhost:6062"); err != nil {
+		panic(err)
+	}
 }

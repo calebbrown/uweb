@@ -32,11 +32,7 @@ func simpleView5(ctx *uweb.Context, test string) string {
 	return "hello " + test
 }
 
-func simpleView6(ctx *uweb.Context, args []string) string {
-	return args[0] + " " + args[1]
-}
-
-func simpleView7(ctx *uweb.Context, args ...string) string {
+func simpleView6(ctx *uweb.Context, args ...string) string {
 	return args[0] + " " + args[1]
 }
 
@@ -50,6 +46,17 @@ func redirectView() {
 
 func abortView() {
 	uweb.Abort(503, "the system is down")
+}
+
+func noAuthView() {
+	uweb.Abort(401, "never seen")
+}
+
+func error401(r *uweb.ErrorResponse) *uweb.Response {
+	new_r := uweb.NewResponse()
+	new_r.Code = 999
+	new_r.Content = []byte("not authed")
+	return new_r
 }
 
 func cookieView(ctx *uweb.Context) string {
@@ -70,19 +77,23 @@ func init() {
 	app.Route("^view4/(world)/$", simpleView4)
 	app.Route("^view5/(world)/$", simpleView5)
 	app.Route("^view6/(hello)/(world)/$", simpleView6)
-	app.Route("^view7/(hello)/(world)/$", simpleView7)
 	app.Route("^notfound/$", notFoundView)
 	app.Route("^redirect/$", redirectView)
 	app.Route("^abort/$", abortView)
+	app.Route("^noauth/$", noAuthView)
 	app.Route("^cookie/$", cookieView)
 
 	app.Get("^method/$", func() string { return "get" })
-	app.Head("^method/$", func() string { return "head" })
 	app.Post("^method/$", func() string { return "post" })
 	app.Put("^method/$", func() string { return "put" })
 	app.Patch("^method/$", func() string { return "patch" })
 	app.Delete("^method/$", func() string { return "delete" })
 	app.Get("^method/get-only/$", func() string { return "get" })
+
+	app.Head("^head1/$", func() string { return "test head" })
+	app.Get("^head2/$", func() string { return "test get" })
+
+	app.Error(401, error401)
 
 	subApp := uweb.NewApp()
 	app.Mount("^sub/", subApp)
@@ -131,11 +142,6 @@ func TestSimpleViews(t *testing.T) {
 	if out6.Body.String() != "hello world" {
 		t.Error("Unexpected body")
 	}
-
-	out7 := doSimpleRequest("GET", "/view7/hello/world/", nil)
-	if out7.Body.String() != "hello world" {
-		t.Error("Unexpected body")
-	}
 }
 
 func TestNotFound(t *testing.T) {
@@ -159,6 +165,16 @@ func TestAbortView(t *testing.T) {
 	}
 }
 
+func TestErrorHandlerView(t *testing.T) {
+	out := doSimpleRequest("GET", "/noauth/", nil)
+	if out.Code != 999 {
+		t.Errorf("Status code %d != 999", out.Code)
+	}
+	if out.Body.String() != "not authed" {
+		t.Error("Response content unexpected")
+	}
+}
+
 func TestRedirectView(t *testing.T) {
 	out := doSimpleRequest("GET", "/redirect/", nil)
 	if out.Code != 302 {
@@ -172,7 +188,6 @@ func TestRedirectView(t *testing.T) {
 func TestMethodTypes(t *testing.T) {
 	methods := []string{
 		"get",
-		"head",
 		"post",
 		"put",
 		"patch",
@@ -183,6 +198,22 @@ func TestMethodTypes(t *testing.T) {
 		content := out.Body.String()
 		if content != method {
 			t.Errorf("Method %s handled by view %s", method, content)
+		}
+	}
+}
+
+func TestHeadResponses(t *testing.T) {
+	urls := []string{
+		"/head1/",
+		"/head2/",
+	}
+	for _, url := range urls {
+		out := doSimpleRequest("head", url, nil)
+		if len(out.Body.String()) != 0 {
+			t.Error("HEAD request returned a Body")
+		}
+		if out.Header().Get("content-length") == "0" {
+			t.Error("HEAD returned empty content-length.")
 		}
 	}
 }
@@ -211,6 +242,18 @@ func TestMountedApp(t *testing.T) {
 	if out1.Body.String() != "hello world" {
 		t.Error("Unexpected body")
 	}
+}
+
+func TestInvalidInputs(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil {
+			t.Error("Expected a panic.")
+		}
+	}()
+	// this will fail with a panic. these functions are invalid
+	uweb.Route("^test_fail", func(foo int) int {
+		return foo + 1
+	})
 }
 
 func TestEmptyCookieView(t *testing.T) {
