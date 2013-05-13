@@ -67,6 +67,16 @@ func cookieView(ctx *uweb.Context) string {
 	return "empty"
 }
 
+func cookieSet(ctx *uweb.Context) string {
+	ctx.Response.SetCookie("test-key", "test-value")
+	return "OK"
+}
+
+func cookieDelete(ctx *uweb.Context) string {
+	ctx.Response.DeleteCookie("test-key")
+	return "OK"
+}
+
 var app *uweb.App
 
 func init() {
@@ -82,6 +92,8 @@ func init() {
 	app.Route("^abort/$", abortView)
 	app.Route("^noauth/$", noAuthView)
 	app.Route("^cookie/$", cookieView)
+	app.Route("^cookie/set/$", cookieSet)
+	app.Route("^cookie/delete/$", cookieDelete)
 
 	app.Get("^method/$", func() string { return "get" })
 	app.Post("^method/$", func() string { return "post" })
@@ -271,5 +283,21 @@ func TestCookieView(t *testing.T) {
 	out := doRequest(req)
 	if out.Body.String() != "test-cookie-value" {
 		t.Error("Unexpected body")
+	}
+}
+
+func TestCookieSet(t *testing.T) {
+	out := doSimpleRequest("GET", "/cookie/set/", nil)
+	cookie := out.Header().Get("Set-Cookie")
+	if cookie != "test-key=test-value; Path=/; HttpOnly" {
+		t.Errorf("set-cookie header incorrect: %s", cookie)
+	}
+}
+
+func TestCookieDelete(t *testing.T) {
+	out := doSimpleRequest("GET", "/cookie/delete/", nil)
+	cookie := out.Header().Get("Set-Cookie")
+	if cookie != "test-key=; Path=/; Max-Age=0; HttpOnly" {
+		t.Errorf("set-cookie header incorrect: %s", cookie)
 	}
 }

@@ -17,7 +17,6 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
-
 )
 
 //////////////////////////////////////////////////////////////////////////////
@@ -49,6 +48,7 @@ type Response struct {
 	Code         int
 	Content      []byte
 	WriteContent bool
+	Cookies      map[string]*http.Cookie
 }
 
 func NewResponse() *Response {
@@ -56,6 +56,7 @@ func NewResponse() *Response {
 		Code:         200,
 		header:       make(http.Header),
 		WriteContent: true,
+		Cookies:      make(map[string]*http.Cookie),
 	}
 	r.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return r
@@ -86,6 +87,22 @@ func (r *Response) StatusCode() int {
 	return r.Code
 }
 
+func (r *Response) SetCookieWithOptions(name, value string, options *CookieOptions) {
+	r.Cookies[name] = options.Cookie(name, value)
+}
+
+func (r *Response) DeleteCookieWithOptions(name string, options *CookieOptions) {
+	r.Cookies[name] = options.DestroyCookie(name)
+}
+
+func (r *Response) SetCookie(name, value string) {
+	r.SetCookieWithOptions(name, value, Config.CookieOptions)
+}
+
+func (r *Response) DeleteCookie(name string) {
+	r.DeleteCookieWithOptions(name, Config.CookieOptions)
+}
+
 func (r *Response) WriteResponse(w http.ResponseWriter) {
 	// Only set the content length if it hasn't already been set
 	if r.Header().Get("Content-Length") == "" {
@@ -97,6 +114,11 @@ func (r *Response) WriteResponse(w http.ResponseWriter) {
 		for _, v := range values {
 			w.Header().Add(k, v)
 		}
+	}
+
+	// set the cookies
+	for _, cookie := range r.Cookies {
+		http.SetCookie(w, cookie)
 	}
 
 	// write the headers
@@ -146,6 +168,46 @@ func (e *ErrorResponse) SetStack(clean bool) {
 	}
 
 	e.Stack = s
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Cookie Config
+
+type CookieOptions struct {
+	Path     string
+	Domain   string
+	MaxAge   int
+	Secure   bool
+	HttpOnly bool
+}
+
+func NewCookieOptions() *CookieOptions {
+	return &CookieOptions{
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		MaxAge:   0,
+	}
+}
+
+// Creates a cookie with the parameters defined by the CookieOptions
+func (cc *CookieOptions) Cookie(name, value string) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     cc.Path,
+		Domain:   cc.Domain,
+		MaxAge:   cc.MaxAge,
+		Secure:   cc.Secure,
+		HttpOnly: cc.HttpOnly,
+	}
+}
+
+// Creates a cookie that will destroy a cookie stored in the user-agent
+func (cc *CookieOptions) DestroyCookie(name string) *http.Cookie {
+	c := cc.Cookie(name, "")
+	c.MaxAge = -9999
+	return c
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -690,8 +752,9 @@ var DefaultApp *App
 // will wrap the execution up so that when a change is detected on a dependency
 // it will restart the execution of the web application.
 var Config struct {
-	Debug      bool
-	AutoReload bool
+	Debug        bool
+	AutoReload   bool
+	CookieOptions *CookieOptions
 }
 
 func Route(pattern string, target Target) {
@@ -754,6 +817,7 @@ func init() {
 	DefaultApp = NewApp()
 	Config.Debug = false
 	Config.AutoReload = false
+	Config.CookieOptions = NewCookieOptions()
 }
 
 // RedirectWithCode behaves like Redirect, but allows a custom HTTP
