@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +35,22 @@ func simpleView5(ctx *uweb.Context, test string) string {
 
 func simpleView6(ctx *uweb.Context, args ...string) string {
 	return args[0] + " " + args[1]
+}
+
+func simpleView7() []byte {
+	return []byte("hello world")
+}
+
+func simpleView8() *strings.Reader {
+	return strings.NewReader("hello world")
+}
+
+type TestStruct struct {
+	Name string
+}
+
+func simpleView9() TestStruct {
+	return TestStruct{Name: "Hello"}
 }
 
 func notFoundView() {
@@ -87,6 +104,9 @@ func init() {
 	app.Route("^view4/(world)/$", simpleView4)
 	app.Route("^view5/(world)/$", simpleView5)
 	app.Route("^view6/(hello)/(world)/$", simpleView6)
+	app.Route("^view7/$", simpleView7)
+	app.Route("^view8/$", simpleView8)
+	app.Route("^view9/$", simpleView9)
 	app.Route("^notfound/$", notFoundView)
 	app.Route("^redirect/$", redirectView)
 	app.Route("^abort/$", abortView)
@@ -139,55 +159,39 @@ func TestBadAddRoute(t *testing.T) {
 }
 
 func TestSimpleViews(t *testing.T) {
-	out1 := doSimpleRequest("GET", "/view1/", nil)
-	if out1.Body.String() != "hello world" {
-		t.Error("Unexpected body")
+	tests := map[string]string{
+		"/view1/":             "hello world",
+		"/view2/":             "hello world",
+		"/view3/":             "hello world",
+		"/view4/world/":       "hello world",
+		"/view5/world/":       "hello world",
+		"/view6/hello/world/": "hello world",
+		"/view7/":             "hello world",
+		"/view8/":             "hello world",
+		"/view9/":             "{\"Name\":\"Hello\"}",
 	}
 
-	out2 := doSimpleRequest("GET", "/view2/", nil)
-	if out2.Body.String() != "hello world" {
-		t.Error("Unexpected body")
-	}
-
-	out3 := doSimpleRequest("GET", "/view3/", nil)
-	if out3.Body.String() != "hello world" {
-		t.Error("Unexpected body")
-	}
-
-	out4 := doSimpleRequest("GET", "/view4/world/", nil)
-	if out4.Body.String() != "hello world" {
-		t.Error("Unexpected body")
-	}
-
-	out5 := doSimpleRequest("GET", "/view5/world/", nil)
-	if out5.Body.String() != "hello world" {
-		t.Error("Unexpected body")
-	}
-
-	out6 := doSimpleRequest("GET", "/view6/hello/world/", nil)
-	if out6.Body.String() != "hello world" {
-		t.Error("Unexpected body")
+	for url, expected := range tests {
+		out := doSimpleRequest("GET", url, nil)
+		if out.Body.String() != expected {
+			t.Errorf("Unexpected body: '%s' != '%s'", expected, out.Body.String())
+		}
 	}
 }
 
-func TestNotFound(t *testing.T) {
-	out := doSimpleRequest("GET", "/notaview/", nil)
-	if out.Code != 404 {
-		t.Errorf("Status code %d != 404", out.Code)
+func TestResponses(t *testing.T) {
+	tests := map[string]int{
+		"/redirect/": 302,
+		"/notaview/": 404,
+		"/notfound/": 404,
+		"/abort/":    503,
 	}
-}
 
-func TestNotFoundView(t *testing.T) {
-	out := doSimpleRequest("GET", "/notfound/", nil)
-	if out.Code != 404 {
-		t.Errorf("Status code %d != 404", out.Code)
-	}
-}
-
-func TestAbortView(t *testing.T) {
-	out := doSimpleRequest("GET", "/abort/", nil)
-	if out.Code != 503 {
-		t.Errorf("Status code %d != 503", out.Code)
+	for url, expected := range tests {
+		out := doSimpleRequest("GET", url, nil)
+		if out.Code != expected {
+			t.Errorf("Unexpected status code: %d != %d", expected, out.Code)
+		}
 	}
 }
 
@@ -203,9 +207,6 @@ func TestErrorHandlerView(t *testing.T) {
 
 func TestRedirectView(t *testing.T) {
 	out := doSimpleRequest("GET", "/redirect/", nil)
-	if out.Code != 302 {
-		t.Errorf("Status code %d != 302", out.Code)
-	}
 	if loc := out.Header().Get("Location"); loc != "http://example.com/" {
 		t.Errorf("Redirect returned unexpected location: %s", loc)
 	}
