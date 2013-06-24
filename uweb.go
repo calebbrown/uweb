@@ -752,41 +752,41 @@ var DefaultApp *App
 // will wrap the execution up so that when a change is detected on a dependency
 // it will restart the execution of the web application.
 var Config struct {
-	Debug        bool
-	AutoReload   bool
+	Debug         bool
+	AutoReload    bool
 	CookieOptions *CookieOptions
 }
 
-func Route(pattern string, target Target) {
-	DefaultApp.Route(pattern, target)
+func Route(pattern string, target Target) error {
+	return DefaultApp.Route(pattern, target)
 }
 
-func Get(pattern string, target Target) {
-	DefaultApp.Get(pattern, target)
+func Get(pattern string, target Target) error {
+	return DefaultApp.Get(pattern, target)
 }
 
-func Head(pattern string, target Target) {
-	DefaultApp.Head(pattern, target)
+func Head(pattern string, target Target) error {
+	return DefaultApp.Head(pattern, target)
 }
 
-func Post(pattern string, target Target) {
-	DefaultApp.Post(pattern, target)
+func Post(pattern string, target Target) error {
+	return DefaultApp.Post(pattern, target)
 }
 
-func Put(pattern string, target Target) {
-	DefaultApp.Put(pattern, target)
+func Put(pattern string, target Target) error {
+	return DefaultApp.Put(pattern, target)
 }
 
-func Patch(pattern string, target Target) {
-	DefaultApp.Patch(pattern, target)
+func Patch(pattern string, target Target) error {
+	return DefaultApp.Patch(pattern, target)
 }
 
-func Delete(pattern string, target Target) {
-	DefaultApp.Delete(pattern, target)
+func Delete(pattern string, target Target) error {
+	return DefaultApp.Delete(pattern, target)
 }
 
-func Options(pattern string, target Target) {
-	DefaultApp.Options(pattern, target)
+func Options(pattern string, target Target) error {
+	return DefaultApp.Options(pattern, target)
 }
 
 func Mount(pattern string, handler Handler) error {

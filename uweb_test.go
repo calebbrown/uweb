@@ -124,6 +124,20 @@ func doSimpleRequest(method, url string, body io.Reader) *httptest.ResponseRecor
 	return doRequest(req)
 }
 
+func TestGoodAddRoute(t *testing.T) {
+	err := uweb.Route("^valid-regex/$", func() {})
+	if err != nil {
+		t.Error("Failed to add route for a valid regular expression")
+	}
+}
+
+func TestBadAddRoute(t *testing.T) {
+	err := uweb.Route("*^valid-regex/$", func() {})
+	if err == nil {
+		t.Error("Added a route for an invalid regular expression")
+	}
+}
+
 func TestSimpleViews(t *testing.T) {
 	out1 := doSimpleRequest("GET", "/view1/", nil)
 	if out1.Body.String() != "hello world" {
