@@ -453,9 +453,6 @@ func newRoute(pattern string) (*route, error) {
 }
 
 func (r *route) AddTarget(method string, target wrappedTarget) {
-	if method == "" {
-		method = "ANY"
-	}
 	r.targets[strings.ToUpper(method)] = target
 }
 
