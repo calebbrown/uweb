@@ -421,8 +421,7 @@ func defaultErrorHandler(ctx *Context, e *ErrorResponse) []reflect.Value {
 		<title>Error: %d</title>
 	</head>
 	<body>
-		<h1>%d %s</h1>
-		%s
+		<h1>%d %s</h1>%s
 	</body>
 </html>`
 	detail := ""
