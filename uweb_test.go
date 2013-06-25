@@ -69,6 +69,10 @@ func noAuthView() {
 	uweb.Abort(401, "never seen")
 }
 
+func panicView() {
+	panic("die!!")
+}
+
 func error401(r *uweb.ErrorResponse) *uweb.Response {
 	new_r := uweb.NewResponse()
 	new_r.Code = 999
@@ -111,6 +115,7 @@ func init() {
 	app.Route("^redirect/$", redirectView)
 	app.Route("^abort/$", abortView)
 	app.Route("^noauth/$", noAuthView)
+	app.Route("^panic/$", panicView)
 	app.Route("^cookie/$", cookieView)
 	app.Route("^cookie/set/$", cookieSet)
 	app.Route("^cookie/delete/$", cookieDelete)
@@ -144,17 +149,22 @@ func doSimpleRequest(method, url string, body io.Reader) *httptest.ResponseRecor
 	return doRequest(req)
 }
 
-func TestGoodAddRoute(t *testing.T) {
-	err := uweb.Route("^valid-regex/$", func() {})
-	if err != nil {
-		t.Error("Failed to add route for a valid regular expression")
+func TestPackageRoutingMethods(t *testing.T) {
+	methods := []func(string, uweb.Target) error{
+		uweb.Route, uweb.Get, uweb.Head,
+		uweb.Post, uweb.Put, uweb.Patch,
+		uweb.Delete, uweb.Options,
 	}
-}
 
-func TestBadAddRoute(t *testing.T) {
-	err := uweb.Route("*^valid-regex/$", func() {})
-	if err == nil {
-		t.Error("Added a route for an invalid regular expression")
+	for _, method := range methods {
+		err := method("^valid-regex/$", func() {})
+		if err != nil {
+			t.Errorf("Failed to call %#v for a valid regular expression", method)
+		}
+		err = method("*^valid-regex/$", func() {})
+		if err == nil {
+			t.Errorf("%#v succeeded to add a invalid regular expression", method)
+		}
 	}
 }
 
@@ -184,6 +194,7 @@ func TestResponses(t *testing.T) {
 		"/redirect/": 302,
 		"/notaview/": 404,
 		"/notfound/": 404,
+		"/panic/":    500,
 		"/abort/":    503,
 	}
 
