@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
+	"net/http/fcgi"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -30,6 +32,16 @@ func argIsContext(argType reflect.Type) bool {
 func argIsStringSlice(argType reflect.Type) bool {
 	return argType.Kind() == reflect.Slice &&
 		argType.Elem().Kind() == reflect.String
+}
+
+func runServer(host string, server func(net.Listener) error) error {
+	doAutoReload()
+	log("Listening on " + host)
+	l, err := net.Listen("tcp", host)
+	if err != nil {
+		return err
+	}
+	return server(l)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -731,11 +743,23 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log(fmt.Sprintf("%s %s [%d]", r.Method, r.RequestURI, resp.StatusCode()))
 }
 
-func (a *App) Run(host string) error {
-	doAutoReload()
-	log("Listening on " + host)
-	return http.ListenAndServe(host, a)
+func (a *App) Serve(l net.Listener) error {
+	return http.Serve(l, a)
 }
+
+func (a *App) ServeFcgi(l net.Listener) error {
+	return fcgi.Serve(l, a)
+}
+
+
+func (a *App) Run(host string) error {
+	return runServer(host, a.Serve)
+}
+
+func (a *App) RunFcgi(host string) error {
+	return runServer(host, a.ServeFcgi)
+}
+
 
 // Default instance of App
 var DefaultApp *App
@@ -797,9 +821,21 @@ func Run(host string) error {
 	return DefaultApp.Run(host)
 }
 
+func RunFcgi(host string) error {
+	return DefaultApp.RunFcgi(host)
+}
+
+func Serve(l net.Listener) error {
+	return DefaultApp.Serve(l)
+}
+
+func ServeFcgi(l net.Listener) error {
+	return DefaultApp.ServeFcgi(l)
+}
+
 func log(message string) {
 	if Config.Debug {
-		fmt.Printf("[muweb] %s\n", message)
+		fmt.Printf("[µweb] %s\n", message)
 	}
 }
 
@@ -854,8 +890,6 @@ func Abort(code int, message string) {
 // BUG(calebbrown): improve configurability
 
 // BUG(calebbrown): capture errors in non-debug mode
-
-// BUG(calebbrown): support Fast-CGI
 
 // BUG(calebbrown): add more tests - query and post data
 
