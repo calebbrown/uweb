@@ -887,6 +887,11 @@ func Abort(code int, message string) {
 	panic(r)
 }
 
+
+// BUG(calebbrown): implement a better Logging system
+
+// BUG(calebbrown): add middleware/plugin capability
+
 // BUG(calebbrown): improve configurability
 
 // BUG(calebbrown): capture errors in non-debug mode
