@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"html"
 	"io"
+	go_log "log"
 	"net"
 	"net/http"
 	"net/http/fcgi"
 	"net/url"
 	"reflect"
 	"regexp"
-	"runtime/debug"
+	go_debug "runtime/debug"
 	"strconv"
 	"strings"
 )
@@ -43,6 +44,7 @@ func runServer(host string, server func(net.Listener) error) error {
 	}
 	return server(l)
 }
+
 
 //////////////////////////////////////////////////////////////////////////////
 // Response Handling
@@ -164,7 +166,7 @@ func NewError(code int, message string) *ErrorResponse {
 }
 
 func (e *ErrorResponse) SetStack(clean bool) {
-	s := string(debug.Stack())
+	s := string(go_debug.Stack())
 
 	// Strip the first 6 lines of the stack
 	// This is a bit of a hack to clean up the stack trace.
@@ -740,7 +742,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.WriteResponse(w)
 
-	log(fmt.Sprintf("%s %s [%d]", r.Method, r.RequestURI, resp.StatusCode()))
+	logf("%s %s [%d]", r.Method, r.RequestURI, resp.StatusCode())
 }
 
 func (a *App) Serve(l net.Listener) error {
@@ -774,6 +776,7 @@ var DefaultApp *App
 var Config struct {
 	Debug         bool
 	AutoReload    bool
+	Logging       bool
 	CookieOptions *CookieOptions
 }
 
@@ -833,9 +836,27 @@ func ServeFcgi(l net.Listener) error {
 	return DefaultApp.ServeFcgi(l)
 }
 
-func log(message string) {
+func log(args ...interface{}) {
+	if Config.Logging {
+		go_log.Print(args...)
+	}
+}
+
+func logf(format string, args ...interface{}) {
+	if Config.Logging {
+		go_log.Printf(format, args...)
+	}
+}
+
+func debug(args ...interface{}) {
 	if Config.Debug {
-		fmt.Printf("[µweb] %s\n", message)
+		log(args...)
+	}
+}
+
+func debugf(format string, args ...interface{}) {
+	if Config.Debug {
+		logf(format, args...)
 	}
 }
 
@@ -847,6 +868,7 @@ func doAutoReload() {
 
 func init() {
 	DefaultApp = NewApp()
+	Config.Logging = true
 	Config.Debug = false
 	Config.AutoReload = false
 	Config.CookieOptions = NewCookieOptions()
@@ -887,8 +909,6 @@ func Abort(code int, message string) {
 	panic(r)
 }
 
-
-// BUG(calebbrown): implement a better Logging system
 
 // BUG(calebbrown): add middleware/plugin capability
 
