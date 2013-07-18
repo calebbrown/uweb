@@ -101,6 +101,7 @@ func cookieDelete(ctx *uweb.Context) string {
 var app *uweb.App
 
 func init() {
+	uweb.Config.Logging = false
 	app = uweb.NewApp()
 	app.Route("^view1/$", simpleView1)
 	app.Route("^view2/$", simpleView2)
