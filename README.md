@@ -36,6 +36,8 @@ Copy and paste this code into an editor, save the file as `hello.go`, in a shell
 
 ## Installation
 
+Make sure you have Go 1.1 installed and `$GOPATH` is set.
+
     go get github.com/calebbrown/uweb
 
 
